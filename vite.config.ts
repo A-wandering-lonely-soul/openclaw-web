@@ -22,5 +22,16 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-vue': ['vue', 'pinia'],
+            'vendor-markdown': ['marked', 'dompurify'],
+            'vendor-mermaid': ['mermaid'],
+          },
+        },
+      },
+    },
   }
 })

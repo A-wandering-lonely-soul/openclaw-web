@@ -3,13 +3,13 @@
 :root {
   --text-main: #ffffff;
   --text-soft: rgba(255, 255, 255, 0.85);
-  --panel-border: rgba(255, 255, 255, 0.4);
-  --panel-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.05));
-  --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+  --panel-border: rgba(255, 255, 255, 0.22);
+  --panel-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
   --accent: #ffdf85;
   --accent-strong: #ffb9da;
   --danger: #ff8eab;
-  --anime-bg-image: url('/static/50606a59-20a2-4c21-9348-2abbc79c4acb.jpg');
+  --anime-bg-image: url('/static/001.jpg');
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: var(--text-main);
   background: #0f1016; /* Clean dark base */
@@ -96,9 +96,9 @@ button {
   border: 1px solid var(--panel-border);
   border-radius: 32px;
   background: var(--panel-bg);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(var(--panel-blur, 12px)) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--panel-blur, 12px)) saturate(130%);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.18);
   position: relative;
   overflow: hidden;
   min-height: 0;
@@ -171,6 +171,9 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.2);
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .primary-button:hover,
@@ -295,7 +298,7 @@ button {
   width: 100%;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(255, 255, 255, 0.2);
@@ -305,10 +308,26 @@ button {
   transition: all 0.3s ease;
 }
 
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+}
+
+.field select option {
+  background: var(--card-bg); /* Fallback for some browsers */
+  background-color: #2c2d3a;
+  color: #fff;
+}
+
 .field select:focus,
 .composer textarea:focus {
   border-color: rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.25);
+  background-color: rgba(255, 255, 255, 0.25);
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1), 0 0 12px rgba(255, 255, 255, 0.4);
 }
 
@@ -372,7 +391,6 @@ button {
 
 .message-body {
   margin: 0;
-  white-space: pre-wrap;
   word-break: break-word;
 }
 
@@ -399,6 +417,22 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 @keyframes reveal {

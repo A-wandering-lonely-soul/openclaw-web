@@ -4,13 +4,20 @@ import { storeToRefs } from 'pinia'
 import { clearChatContext, fetchModelState, sendChatMessage, updateModelState } from '@/lib/api'
 import { DEFAULT_MODEL_STATE, MODEL_OPTIONS } from '@/lib/constants'
 import { useChatStateStore } from '@/stores/chatState'
+import { useUiSettingsStore } from '@/stores/uiSettings'
 import { formatTime, makeId } from '@/lib/utils'
 import type { ChatMessage, ProviderModelState } from '@/lib/types'
+import MessageRenderer from '@/components/MessageRenderer.vue'
+import BlurControl from '@/components/BlurControl.vue'
 
 const chatStateStore = useChatStateStore()
+const uiSettingsStore = useUiSettingsStore()
+const { blurAmount } = storeToRefs(uiSettingsStore)
 const { sessions, activeSessionId, activeSession } = storeToRefs(chatStateStore)
 const draft = ref('')
 const sending = ref(false)
+const clearingContext = ref(false)
+const deletingSessionId = ref<string | null>(null)
 const loadingModel = ref(false)
 const updatingModel = ref(false)
 const pageError = ref('')
@@ -58,16 +65,19 @@ function switchSession(sessionId: string) {
 }
 
 async function deleteSession(sessionId: string) {
-  if (sending.value) {
+  if (sending.value || deletingSessionId.value) {
     return
   }
 
+  deletingSessionId.value = sessionId
   try {
     await clearChatContext(sessionId)
     chatStateStore.deleteSession(sessionId)
     pageError.value = ''
   } catch (error) {
     pageError.value = getErrorMessage(error, '删除会话失败')
+  } finally {
+    deletingSessionId.value = null
   }
 }
 
@@ -122,16 +132,19 @@ async function submitMessage() {
 
 async function clearActiveSession() {
   const session = activeSession.value
-  if (!session || sending.value) {
+  if (!session || sending.value || clearingContext.value) {
     return
   }
 
+  clearingContext.value = true
   try {
     await clearChatContext(session.id)
     chatStateStore.resetSession(session.id, session.title)
     pageError.value = ''
   } catch (error) {
     pageError.value = getErrorMessage(error, '清空上下文失败')
+  } finally {
+    clearingContext.value = false
   }
 }
 
@@ -175,7 +188,7 @@ async function persistModelState() {
 </script>
 
 <template>
-  <div class="shell">
+  <div class="shell" :style="{ '--panel-blur': `${blurAmount}px` }">
     <aside class="sidebar">
       <div class="brand">
         <p class="eyebrow">OpenClaw Web</p>
@@ -196,12 +209,13 @@ async function persistModelState() {
           <button
             type="button"
             class="session-delete"
-            :disabled="sending"
+            :disabled="sending || !!deletingSessionId"
             @click="deleteSession(session.id)"
             aria-label="删除会话"
             title="删除会话"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
+            <span v-if="deletingSessionId === session.id" class="btn-spinner" aria-hidden="true" />
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
               <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h2v9H7V9Zm4 0h2v9h-2V9Zm4 0h2v9h-2V9Z" />
             </svg>
           </button>
@@ -226,6 +240,7 @@ async function persistModelState() {
         </div>
 
         <div class="toolbar-actions">
+          <BlurControl />
           <label class="field">
             <span>Provider</span>
             <select
@@ -251,8 +266,9 @@ async function persistModelState() {
             </select>
           </label>
 
-          <button class="secondary-button" type="button" :disabled="sending" @click="clearActiveSession">
-            清空上下文
+          <button class="secondary-button" type="button" :disabled="sending || clearingContext" @click="clearActiveSession">
+            <span v-if="clearingContext" class="btn-spinner" aria-hidden="true" />
+            {{ clearingContext ? '清空中...' : '清空上下文' }}
           </button>
         </div>
       </header>
@@ -271,9 +287,11 @@ async function persistModelState() {
             <span>{{ message.role === 'user' ? '你' : 'OpenClaw' }}</span>
             <span>{{ formatTime(message.createdAt) }}</span>
           </div>
-          <p class="message-body" :class="{ pending: message.pending, failed: message.failed }">
-            {{ message.content }}
-          </p>
+          <MessageRenderer
+            :content="message.content"
+            :pending="message.pending"
+            :failed="message.failed"
+          />
         </article>
       </section>
 
