@@ -139,7 +139,7 @@ async function clearActiveSession() {
   clearingContext.value = true
   try {
     await clearChatContext(session.id)
-    chatStateStore.resetSession(session.id, session.title)
+    chatStateStore.resetSession(session.id)
     pageError.value = ''
   } catch (error) {
     pageError.value = getErrorMessage(error, '清空上下文失败')
