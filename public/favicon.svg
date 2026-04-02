@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OpenClaw">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f4d17f" />
+      <stop offset="1" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#0f1729" stroke="#2a3b5e" stroke-width="2" />
+  <path d="M18 40c0-10 6-16 14-16s14 6 14 16" fill="none" stroke="url(#g)" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="24" cy="40" r="4" fill="#f4efe4"/>
+  <circle cx="40" cy="40" r="4" fill="#f4efe4"/>
+  <path d="M25 21l5-7m9 7l-5-7" stroke="#f6b56b" stroke-width="3" stroke-linecap="round"/>
+</svg>

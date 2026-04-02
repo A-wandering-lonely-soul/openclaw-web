@@ -15,7 +15,7 @@ function createWelcomeMessage(): ChatMessage {
   return {
     id: makeId('msg'),
     role: 'assistant',
-    content: '欢迎使用 OpenClaw Web。你可以直接在这里继续调用现有后端能力。',
+    content: '你好，我是 OpenClaw。',
     createdAt: new Date().toISOString(),
   }
 }

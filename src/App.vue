@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { clearChatContext, fetchModelState, sendChatMessage, updateModelState } from '@/lib/api'
-import { API_BASE_URL, DEFAULT_MODEL_STATE, MODEL_OPTIONS } from '@/lib/constants'
+import { DEFAULT_MODEL_STATE, MODEL_OPTIONS } from '@/lib/constants'
 import { useChatStateStore } from '@/stores/chatState'
 import { formatTime, makeId } from '@/lib/utils'
 import type { ChatMessage, ProviderModelState } from '@/lib/types'
@@ -179,8 +179,7 @@ async function persistModelState() {
     <aside class="sidebar">
       <div class="brand">
         <p class="eyebrow">OpenClaw Web</p>
-        <h1>网页对话面板</h1>
-        <p class="muted">直接复用现有后端 API，对话上下文按 chat_id 隔离。</p>
+        <h1>指挥室</h1>
       </div>
 
       <button class="primary-button" type="button" @click="createNewSession">
@@ -196,19 +195,24 @@ async function persistModelState() {
         >
           <button
             type="button"
+            class="session-delete"
+            :disabled="sending"
+            @click="deleteSession(session.id)"
+            aria-label="删除会话"
+            title="删除会话"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h2v9H7V9Zm4 0h2v9h-2V9Zm4 0h2v9h-2V9Z" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
             class="session-main"
             @click="switchSession(session.id)"
           >
             <span class="session-title">{{ session.title }}</span>
             <span class="session-meta">{{ formatTime(session.updatedAt) }}</span>
-          </button>
-          <button
-            type="button"
-            class="session-delete"
-            :disabled="sending"
-            @click="deleteSession(session.id)"
-          >
-            删除
           </button>
         </div>
       </div>
@@ -254,7 +258,7 @@ async function persistModelState() {
       </header>
 
       <p v-if="pageError" class="banner error">{{ pageError }}</p>
-      <p v-else class="banner">后端地址：{{ API_BASE_URL }} ｜ {{ modelState.provider }} / {{ modelState.model }}</p>
+      <p v-else class="banner">模型：{{ modelState.provider }} / {{ modelState.model }}</p>
 
       <section class="message-list">
         <article

@@ -6,10 +6,19 @@ OpenClaw 的网页聊天前端，基于 Vue 3 + TypeScript + Vite。
 
 - 单页聊天界面，无登录页
 - 多会话切换，按 chat_id 隔离上下文
+- 删除单条会话时，同时清理该 chat_id 的后端上下文
 - 读取并切换后端当前模型
 - 清空当前会话上下文
 - 本地持久化会话列表与消息记录
 - 开发环境通过 Vite 代理转发 /api，避免浏览器跨域
+- 界面说明性文案已精简，使用文档承载部署与架构说明
+
+## 静态资源目录
+
+- 背景图目录：`public/static/`
+- 构建后访问路径：`/static/*`
+- 可将自定义背景图放入该目录，例如 `public/static/anime-bg.jpg`
+- 在 `src/style.css` 的 `:root` 中设置 `--anime-bg-image: url('/static/anime-bg.jpg')` 即可启用
 
 ## 环境要求
 
