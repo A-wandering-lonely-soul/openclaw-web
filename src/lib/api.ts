@@ -59,7 +59,11 @@ async function requestJson<T>(path: string, init: RequestInit = {}, timeout = DE
 export async function sendChatMessage(prompt: string, chatId: string) {
   return requestJson<{ response: string }>('/chat', {
     method: 'POST',
-    body: JSON.stringify({ prompt, chat_id: chatId }),
+    body: JSON.stringify({
+      prompt,
+      chat_id: chatId,
+      entry: 'web_frontend',
+    }),
   })
 }
 
