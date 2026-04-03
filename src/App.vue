@@ -2,11 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { clearChatContext, fetchModelState, sendChatMessage, updateModelState } from '@/lib/api'
-import { DEFAULT_MODEL_STATE, MODEL_OPTIONS } from '@/lib/constants'
+import { DEFAULT_MODEL_STATE, MODEL_OPTIONS, WEB_DISABLED_MODELS } from '@/lib/constants'
 import { useChatStateStore } from '@/stores/chatState'
 import { useUiSettingsStore } from '@/stores/uiSettings'
 import { formatTime, makeId } from '@/lib/utils'
-import type { ChatMessage, ProviderModelState } from '@/lib/types'
+import type { ChatMessage, ImageAttachment, ProviderModelState } from '@/lib/types'
 import MessageRenderer from '@/components/MessageRenderer.vue'
 import BlurControl from '@/components/BlurControl.vue'
 
@@ -22,10 +22,16 @@ const loadingModel = ref(false)
 const updatingModel = ref(false)
 const pageError = ref('')
 const modelState = ref<ProviderModelState>({ ...DEFAULT_MODEL_STATE })
+const pendingImages = ref<ImageAttachment[]>([])
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const availableModels = computed(() => {
   return MODEL_OPTIONS[modelState.value.provider] ?? []
 })
+
+function isModelDisabledInWeb(model: string) {
+  return modelState.value.provider === 'copilot' && WEB_DISABLED_MODELS.has(model)
+}
 
 onMounted(async () => {
   const firstSession = sessions.value[0]
@@ -81,20 +87,70 @@ async function deleteSession(sessionId: string) {
   }
 }
 
+function openImagePicker() {
+  fileInputRef.value?.click()
+}
+
+async function handleImageFiles(event: Event) {
+  const files = Array.from((event.target as HTMLInputElement).files ?? [])
+  if (!files.length) return
+
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue
+    const data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result
+        if (typeof result !== 'string') {
+          reject(new Error('读取图片失败'))
+          return
+        }
+        const commaIndex = result.indexOf(',')
+        if (commaIndex < 0) {
+          reject(new Error('图片数据格式无效'))
+          return
+        }
+        resolve(result.slice(commaIndex + 1))
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    pendingImages.value.push({
+      type: 'image_jpeg',
+      data,
+      file_path: file.name,
+      previewUrl: URL.createObjectURL(file),
+    })
+  }
+  // 清空 input 以便重复选同一文件
+  ;(event.target as HTMLInputElement).value = ''
+}
+
+function removePendingImage(index: number) {
+  const removed = pendingImages.value.splice(index, 1)[0]
+  if (removed) URL.revokeObjectURL(removed.previewUrl)
+}
+
 async function submitMessage() {
   const prompt = draft.value.trim()
   const session = activeSession.value
-  if (!prompt || !session || sending.value) {
+  if ((!prompt && pendingImages.value.length === 0) || !session || sending.value) {
     return
   }
 
   pageError.value = ''
   sending.value = true
 
+  const imagesToSend = pendingImages.value.slice()
+  const displayContent = imagesToSend.length
+    ? `[图片 ×${imagesToSend.length}]${prompt ? ' ' + prompt : ''}`
+    : prompt
+
   const userMessage: ChatMessage = {
     id: makeId('msg'),
     role: 'user',
-    content: prompt,
+    content: displayContent,
+    images: imagesToSend,
     createdAt: new Date().toISOString(),
   }
   const pendingMessage: ChatMessage = {
@@ -108,9 +164,12 @@ async function submitMessage() {
   chatStateStore.appendMessage(session.id, userMessage)
   chatStateStore.appendMessage(session.id, pendingMessage)
   draft.value = ''
+  pendingImages.value.forEach(img => URL.revokeObjectURL(img.previewUrl))
+  pendingImages.value = []
 
   try {
-    const result = await sendChatMessage(prompt, session.id)
+    const apiImages = imagesToSend.map(({ type, data, file_path }) => ({ type, data, file_path }))
+    const result = await sendChatMessage(prompt || '(用户发送了图片)', session.id, apiImages.length ? apiImages : undefined)
     chatStateStore.patchMessage(session.id, pendingMessage.id, {
       content: result.response,
       pending: false,
@@ -162,6 +221,10 @@ async function handleProviderChange(provider: string) {
 }
 
 async function handleModelChange(model: string) {
+  if (isModelDisabledInWeb(model)) {
+    return
+  }
+
   modelState.value = {
     ...modelState.value,
     model,
@@ -260,7 +323,12 @@ async function persistModelState() {
               :disabled="loadingModel || updatingModel"
               @change="handleModelChange(($event.target as HTMLSelectElement).value)"
             >
-              <option v-for="item in availableModels" :key="item" :value="item">
+              <option
+                v-for="item in availableModels"
+                :key="item"
+                :value="item"
+                :disabled="isModelDisabledInWeb(item)"
+              >
                 {{ item }}
               </option>
             </select>
@@ -275,7 +343,7 @@ async function persistModelState() {
 
       <p v-if="pageError" class="banner error">{{ pageError }}</p>
       <p v-else class="banner">模型：{{ modelState.provider }} / {{ modelState.model }}</p>
-
+      <!-- <p v-if="modelState.provider === 'copilot'" >Web 端已禁用高级 Copilot 模型：Claude Opus 4.6、Claude Sonnet 4.6、GPT-5.3-Codex、Gemini 3.1 Pro</p> -->
       <section class="message-list">
         <article
           v-for="message in activeSession.messages"
@@ -296,6 +364,12 @@ async function persistModelState() {
       </section>
 
       <form class="composer" @submit.prevent="submitMessage">
+        <div v-if="pendingImages.length" class="image-preview-row">
+          <div v-for="(img, i) in pendingImages" :key="i" class="image-preview-item">
+            <img :src="img.previewUrl" alt="待发送图片" />
+            <button type="button" class="image-remove" @click="removePendingImage(i)" title="移除">×</button>
+          </div>
+        </div>
         <textarea
           v-model="draft"
           rows="5"
@@ -306,7 +380,18 @@ async function persistModelState() {
         />
         <div class="composer-footer">
           <span class="muted">{{ draft.length }}/6000</span>
-          <button class="primary-button" type="submit" :disabled="sending || !draft.trim()">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="image/*"
+            multiple
+            style="display:none"
+            @change="handleImageFiles"
+          />
+          <button class="secondary-button" type="button" :disabled="sending" @click="openImagePicker" title="上传图片">
+            🖼 图片
+          </button>
+          <button class="primary-button" type="submit" :disabled="sending || (!draft.trim() && pendingImages.length === 0)">
             {{ sending ? '发送中...' : '发送' }}
           </button>
         </div>
