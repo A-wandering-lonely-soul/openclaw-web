@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { clearChatContext, fetchModelState, sendChatMessage, updateModelState } from '@/lib/api'
-import { DEFAULT_MODEL_STATE, MODEL_OPTIONS, OLLAMA_HEAVY_MODELS, WEB_DISABLED_MODELS } from '@/lib/constants'
+import { DEFAULT_MODEL_STATE, MODEL_OPTIONS, WEB_DISABLED_MODELS } from '@/lib/constants'
 import { useChatStateStore } from '@/stores/chatState'
 import { useUiSettingsStore } from '@/stores/uiSettings'
 import { formatTime, makeId } from '@/lib/utils'
