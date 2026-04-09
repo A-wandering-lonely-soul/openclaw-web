@@ -12,7 +12,7 @@ import BlurControl from '@/components/BlurControl.vue'
 
 const chatStateStore = useChatStateStore()
 const uiSettingsStore = useUiSettingsStore()
-const { blurAmount } = storeToRefs(uiSettingsStore)
+const { blurAmount, isAdmin } = storeToRefs(uiSettingsStore)
 const { sessions, activeSessionId, activeSession } = storeToRefs(chatStateStore)
 const draft = ref('')
 const sending = ref(false)
@@ -34,11 +34,13 @@ const availableModels = computed(() => {
 })
 
 function isModelDisabledInWeb(model: string) {
+  if (isAdmin.value) return false
+  
   if (modelState.value.provider === 'copilot') {
     return WEB_DISABLED_MODELS.has(model)
   }
   if (modelState.value.provider === 'ollama') {
-    return OLLAMA_HEAVY_MODELS.has(model)
+    return true // completely disabled for guest
   }
   return false
 }
@@ -145,6 +147,11 @@ async function submitMessage() {
   const prompt = draft.value.trim()
   const session = activeSession.value
   if ((!prompt && pendingImages.value.length === 0) || !session || sending.value) {
+    return
+  }
+
+  if (isModelDisabledInWeb(modelState.value.model)) {
+    pageError.value = `${isAdmin.value ? '此模型暂不可用' : '游客模式下此模型不可用，请切换模型'}`
     return
   }
 
@@ -265,7 +272,12 @@ async function persistModelState() {
     <aside class="sidebar">
       <div class="brand">
         <p class="eyebrow">OpenClaw Web</p>
-        <h1>指挥室</h1>
+        <div class="brand-title">
+          <h1>指挥室</h1>
+          <span class="role-badge" :class="isAdmin ? 'admin' : 'guest'">
+            {{ isAdmin ? '管理员模式' : '游客模式' }}
+          </span>
+        </div>
       </div>
 
       <button class="primary-button" type="button" @click="createNewSession">
@@ -323,7 +335,7 @@ async function persistModelState() {
             >
               <option value="copilot">copilot</option>
               <option value="deepseek">deepseek</option>
-              <option value="ollama">ollama</option>
+              <option v-if="isAdmin" value="ollama">ollama</option>
             </select>
           </label>
 
@@ -386,7 +398,7 @@ async function persistModelState() {
           v-model="draft"
           rows="5"
           maxlength="6000"
-          placeholder="输入你的问题，按 Ctrl/Command + Enter 发送"
+          :placeholder="isModelDisabledInWeb(modelState.model) ? (isAdmin ? '此模型暂不可用' : '游客模式下此模型不可用，请在右上角切换模型') : '输入你的问题，按 Ctrl/Command + Enter 发送'"
           @keydown.ctrl.enter.prevent="submitMessage"
           @keydown.meta.enter.prevent="submitMessage"
         />
@@ -400,10 +412,10 @@ async function persistModelState() {
             style="display:none"
             @change="handleImageFiles"
           />
-          <button class="secondary-button" type="button" :disabled="sending" @click="openImagePicker" title="上传图片">
+          <button class="secondary-button" type="button" :disabled="sending || isModelDisabledInWeb(modelState.model)" @click="openImagePicker" title="上传图片">
             🖼 图片
           </button>
-          <button class="primary-button" type="submit" :disabled="sending || (!draft.trim() && pendingImages.length === 0)">
+          <button class="primary-button" type="submit" :disabled="sending || isModelDisabledInWeb(modelState.model) || (!draft.trim() && pendingImages.length === 0)">
             {{ sending ? '发送中...' : '发送' }}
           </button>
         </div>

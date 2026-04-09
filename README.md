@@ -69,5 +69,7 @@ npm run dev
 npm run build
 npm run preview
 ```
+http://localhost:5173/?code=1111011 进来的有更高的权限获取全部模型，这个功能目前是纯前端完成
+
 
 当前版本只实现前端项目创建与本地联调，没有接入 openclaw 仓库现有的 Docker Compose、Caddy 或 Nginx 路由。后续如果要生产同域发布，可以再把 dist 或前端容器接入现有反向代理。
