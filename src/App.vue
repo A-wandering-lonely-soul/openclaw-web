@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { clearChatContext, fetchModelState, sendChatMessage, updateModelState } from '@/lib/api'
-import { DEFAULT_MODEL_STATE, MODEL_OPTIONS, WEB_DISABLED_MODELS } from '@/lib/constants'
+import { DEFAULT_MODEL_STATE, MODEL_OPTIONS, OLLAMA_HEAVY_MODELS, WEB_DISABLED_MODELS } from '@/lib/constants'
 import { useChatStateStore } from '@/stores/chatState'
 import { useUiSettingsStore } from '@/stores/uiSettings'
 import { formatTime, makeId } from '@/lib/utils'
@@ -26,11 +26,21 @@ const pendingImages = ref<ImageAttachment[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const availableModels = computed(() => {
-  return MODEL_OPTIONS[modelState.value.provider] ?? []
+  const models = [...(MODEL_OPTIONS[modelState.value.provider] ?? [])]
+  if (modelState.value.provider === 'ollama' && modelState.value.model && !models.includes(modelState.value.model)) {
+    models.unshift(modelState.value.model)
+  }
+  return models
 })
 
 function isModelDisabledInWeb(model: string) {
-  return modelState.value.provider === 'copilot' && WEB_DISABLED_MODELS.has(model)
+  if (modelState.value.provider === 'copilot') {
+    return WEB_DISABLED_MODELS.has(model)
+  }
+  if (modelState.value.provider === 'ollama') {
+    return OLLAMA_HEAVY_MODELS.has(model)
+  }
+  return false
 }
 
 onMounted(async () => {
@@ -313,6 +323,7 @@ async function persistModelState() {
             >
               <option value="copilot">copilot</option>
               <option value="deepseek">deepseek</option>
+              <option value="ollama">ollama</option>
             </select>
           </label>
 
@@ -343,7 +354,8 @@ async function persistModelState() {
 
       <p v-if="pageError" class="banner error">{{ pageError }}</p>
       <p v-else class="banner">模型：{{ modelState.provider }} / {{ modelState.model }}</p>
-      <!-- <p v-if="modelState.provider === 'copilot'" >Web 端已禁用高级 Copilot 模型：Claude Opus 4.6、Claude Sonnet 4.6、GPT-5.3-Codex、Gemini 3.1 Pro</p> -->
+      <!-- <p v-if="modelState.provider === 'copilot'" class="banner subtle">Web 端已禁用高级 Copilot 模型：Claude Opus 4.6、Claude Sonnet 4.6、GPT-5.3-Codex、Gemini 3.1 Pro</p>
+      <p v-else-if="modelState.provider === 'ollama'" class="banner subtle">Ollama 在低配服务器上仅推荐 3B 模型。Web 端默认隐藏重型模型以降低超时和高负载风险。</p> -->
       <section class="message-list">
         <article
           v-for="message in activeSession.messages"
