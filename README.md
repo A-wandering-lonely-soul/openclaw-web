@@ -8,10 +8,19 @@ OpenClaw 的网页聊天前端，基于 Vue 3 + TypeScript + Vite。
 - 多会话切换，按 chat_id 隔离上下文
 - 删除单条会话时，同时清理该 chat_id 的后端上下文
 - 读取并切换后端当前模型
+- 支持在 Web 端切换 provider：copilot / deepseek / ollama
+- Ollama 在 Web 端默认仅展示低配推荐模型 qwen2.5:3b
+- 当后端当前是 Ollama 重型模型时，Web 会显示该模型但禁用直接选择，避免误操作导致超时
 - 清空当前会话上下文
 - 本地持久化会话列表与消息记录
 - 开发环境通过 Vite 代理转发 /api，避免浏览器跨域
 - 界面说明性文案已精简，使用文档承载部署与架构说明
+
+## 最近更新
+
+- 新增 Ollama provider 在前端下拉可见并可切换。
+- 新增 Ollama 模型分层：Web 默认仅暴露 3B 轻量模型；重型模型由后端或运维侧控制。
+- Web 端模型禁用策略扩展到 Ollama 重型模型，降低低配服务器 504 风险。
 
 ## 静态资源目录
 
@@ -60,5 +69,7 @@ npm run dev
 npm run build
 npm run preview
 ```
+http://localhost:5173/?code=1111011 进来的有更高的权限获取全部模型，这个功能目前是纯前端完成
+
 
 当前版本只实现前端项目创建与本地联调，没有接入 openclaw 仓库现有的 Docker Compose、Caddy 或 Nginx 路由。后续如果要生产同域发布，可以再把 dist 或前端容器接入现有反向代理。
