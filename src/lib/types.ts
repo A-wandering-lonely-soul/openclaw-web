@@ -29,6 +29,31 @@ export interface ProviderModelState {
   model: string
 }
 
+export interface SkillSummary {
+  id: string
+  name: string
+  enabled: boolean
+  entry_allowlist?: string[]
+  manifest?: string
+  tools?: string[]
+  system_prompt?: string
+}
+
+export interface SkillsResponse {
+  skills: SkillSummary[]
+  tool_count: number
+  tool_names: string[]
+  skill_dirs: string[]
+}
+
+export interface InstallSkillPayload {
+  git_url: string
+  ref?: string
+  subdir?: string
+  install_name?: string
+  overwrite?: boolean
+}
+
 export interface ChatSession extends SessionSummary {
   messages: ChatMessage[]
 }

@@ -1,5 +1,5 @@
 import { API_BASE_URL, DEFAULT_TIMEOUT_MS } from './constants'
-import type { ProviderModelState } from './types'
+import type { InstallSkillPayload, ProviderModelState, SkillsResponse } from './types'
 
 interface ApiErrorPayload {
   response?: string
@@ -89,5 +89,32 @@ export async function updateModelState(provider: string, model: string) {
   return requestJson<{ status: string; provider: string; model: string }>('/set_model', {
     method: 'POST',
     body: JSON.stringify({ provider, model }),
+  })
+}
+
+export async function fetchSkills() {
+  return requestJson<SkillsResponse>('/skills', {
+    method: 'GET',
+  })
+}
+
+export async function reloadSkills() {
+  return requestJson<SkillsResponse>('/skills/reload', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+}
+
+export async function toggleSkill(id: string, enabled: boolean) {
+  return requestJson<{ status: string; id: string; enabled: boolean }>('/skills/toggle', {
+    method: 'POST',
+    body: JSON.stringify({ id, enabled }),
+  })
+}
+
+export async function installSkill(payload: InstallSkillPayload) {
+  return requestJson<{ status: string; installed: { dir: string; skill_id: string; name: string } }>('/skills/install', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { clearChatContext, fetchModelState, sendChatMessage, updateModelState } from '@/lib/api'
+import { clearChatContext, fetchModelState, fetchSkills, installSkill, reloadSkills, sendChatMessage, toggleSkill, updateModelState } from '@/lib/api'
 import { DEFAULT_MODEL_STATE, MODEL_OPTIONS, WEB_DISABLED_MODELS } from '@/lib/constants'
 import { useChatStateStore } from '@/stores/chatState'
 import { useUiSettingsStore } from '@/stores/uiSettings'
 import { formatTime, makeId } from '@/lib/utils'
-import type { ChatMessage, ImageAttachment, ProviderModelState } from '@/lib/types'
+import type { ChatMessage, ImageAttachment, ProviderModelState, SkillSummary } from '@/lib/types'
 import MessageRenderer from '@/components/MessageRenderer.vue'
 import BlurControl from '@/components/BlurControl.vue'
 
@@ -24,6 +24,20 @@ const pageError = ref('')
 const modelState = ref<ProviderModelState>({ ...DEFAULT_MODEL_STATE })
 const pendingImages = ref<ImageAttachment[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const showSkillPanel = ref(false)
+const skillLoading = ref(false)
+const skillReloading = ref(false)
+const skillTogglingId = ref<string | null>(null)
+const skillError = ref('')
+const skills = ref<SkillSummary[]>([])
+const skillToolCount = ref(0)
+const skillDirs = ref<string[]>([])
+const installGitUrl = ref('')
+const installRef = ref('')
+const installSubdir = ref('')
+const installName = ref('')
+const installOverwrite = ref(false)
+const skillInstalling = ref(false)
 
 const availableModels = computed(() => {
   const models = [...(MODEL_OPTIONS[modelState.value.provider] ?? [])]
@@ -52,6 +66,7 @@ onMounted(async () => {
   }
 
   await refreshModelState()
+  await refreshSkills()
 })
 
 async function refreshModelState() {
@@ -62,6 +77,24 @@ async function refreshModelState() {
     pageError.value = getErrorMessage(error, '模型信息读取失败')
   } finally {
     loadingModel.value = false
+  }
+}
+
+async function refreshSkills() {
+  if (!isAdmin.value) {
+    return
+  }
+  skillLoading.value = true
+  skillError.value = ''
+  try {
+    const result = await fetchSkills()
+    skills.value = result.skills || []
+    skillToolCount.value = result.tool_count || 0
+    skillDirs.value = result.skill_dirs || []
+  } catch (error) {
+    skillError.value = getErrorMessage(error, 'Skill 列表读取失败')
+  } finally {
+    skillLoading.value = false
   }
 }
 
@@ -265,6 +298,83 @@ async function persistModelState() {
     updatingModel.value = false
   }
 }
+
+async function openSkillPanel() {
+  if (!isAdmin.value) {
+    return
+  }
+  showSkillPanel.value = true
+  await refreshSkills()
+}
+
+function closeSkillPanel() {
+  showSkillPanel.value = false
+}
+
+async function handleReloadSkills() {
+  if (!isAdmin.value || skillReloading.value) {
+    return
+  }
+  skillReloading.value = true
+  skillError.value = ''
+  try {
+    await reloadSkills()
+    await refreshSkills()
+  } catch (error) {
+    skillError.value = getErrorMessage(error, 'Skill 重载失败')
+  } finally {
+    skillReloading.value = false
+  }
+}
+
+async function handleToggleSkill(skill: SkillSummary) {
+  if (!isAdmin.value || skillTogglingId.value) {
+    return
+  }
+  skillTogglingId.value = skill.id
+  skillError.value = ''
+  try {
+    await toggleSkill(skill.id, !skill.enabled)
+    await refreshSkills()
+  } catch (error) {
+    skillError.value = getErrorMessage(error, 'Skill 状态更新失败')
+  } finally {
+    skillTogglingId.value = null
+  }
+}
+
+async function handleInstallSkill() {
+  if (!isAdmin.value || skillInstalling.value) {
+    return
+  }
+  if (!installGitUrl.value.trim()) {
+    skillError.value = '请先填写 Git URL'
+    return
+  }
+
+  skillInstalling.value = true
+  skillError.value = ''
+  try {
+    const res = await installSkill({
+      git_url: installGitUrl.value.trim(),
+      ref: installRef.value.trim() || undefined,
+      subdir: installSubdir.value.trim() || undefined,
+      install_name: installName.value.trim() || undefined,
+      overwrite: installOverwrite.value,
+    })
+    await refreshSkills()
+    installRef.value = ''
+    installSubdir.value = ''
+    installName.value = ''
+    installOverwrite.value = false
+    skillError.value = ''
+    pageError.value = `Skill 安装成功：${res.installed?.name || '未知'}`
+  } catch (error) {
+    skillError.value = getErrorMessage(error, 'Skill 安装失败')
+  } finally {
+    skillInstalling.value = false
+  }
+}
 </script>
 
 <template>
@@ -361,6 +471,15 @@ async function persistModelState() {
             <span v-if="clearingContext" class="btn-spinner" aria-hidden="true" />
             {{ clearingContext ? '清空中...' : '清空上下文' }}
           </button>
+
+          <button
+            v-if="isAdmin"
+            class="secondary-button"
+            type="button"
+            @click="openSkillPanel"
+          >
+            Skill 管理
+          </button>
         </div>
       </header>
 
@@ -421,5 +540,97 @@ async function persistModelState() {
         </div>
       </form>
     </main>
+
+    <div v-if="isAdmin && showSkillPanel" class="skill-overlay" @click.self="closeSkillPanel">
+      <section class="skill-panel">
+        <header class="skill-header">
+          <div>
+            <p class="eyebrow">Skill Center</p>
+            <h3>Skill 管理</h3>
+            <p class="muted small">已注册工具数：{{ skillToolCount }}</p>
+          </div>
+          <button class="secondary-button" type="button" @click="closeSkillPanel">关闭</button>
+        </header>
+
+        <p v-if="skillError" class="banner error">{{ skillError }}</p>
+        <p v-else class="banner subtle">游客模式不显示此面板，仅管理员可操作。</p>
+
+        <div class="skill-actions">
+          <button class="secondary-button" type="button" :disabled="skillLoading || skillReloading" @click="refreshSkills">
+            <span v-if="skillLoading" class="btn-spinner" aria-hidden="true" />
+            {{ skillLoading ? '加载中...' : '刷新列表' }}
+          </button>
+          <button class="primary-button" type="button" :disabled="skillReloading" @click="handleReloadSkills">
+            <span v-if="skillReloading" class="btn-spinner" aria-hidden="true" />
+            {{ skillReloading ? '重载中...' : '重载 Skill' }}
+          </button>
+        </div>
+
+        <div class="skill-install">
+          <h4>在线安装公开 Skill（Git URL）</h4>
+          <div class="skill-install-grid">
+            <label class="field skill-field">
+              <span>Git URL</span>
+              <input v-model="installGitUrl" type="text" placeholder="https://github.com/owner/repo.git" />
+            </label>
+            <label class="field skill-field">
+              <span>分支/Tag（可选）</span>
+              <input v-model="installRef" type="text" placeholder="main" />
+            </label>
+            <label class="field skill-field">
+              <span>子目录（可选）</span>
+              <input v-model="installSubdir" type="text" placeholder="skills/my_skill" />
+            </label>
+            <label class="field skill-field">
+              <span>安装目录名（可选）</span>
+              <input v-model="installName" type="text" placeholder="my_skill" />
+            </label>
+          </div>
+          <label class="skill-check">
+            <input v-model="installOverwrite" type="checkbox" />
+            <span>同名目录存在时覆盖安装</span>
+          </label>
+          <div class="skill-actions">
+            <button class="primary-button" type="button" :disabled="skillInstalling" @click="handleInstallSkill">
+              <span v-if="skillInstalling" class="btn-spinner" aria-hidden="true" />
+              {{ skillInstalling ? '安装中...' : '从 Git 安装 Skill' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="skill-dirs" v-if="skillDirs.length">
+          <p class="muted small">扫描目录：</p>
+          <ul>
+            <li v-for="dir in skillDirs" :key="dir">{{ dir }}</li>
+          </ul>
+        </div>
+
+        <div class="skill-list">
+          <article v-for="skill in skills" :key="skill.id" class="skill-card">
+            <div class="skill-main">
+              <div>
+                <h4>{{ skill.name || skill.id }}</h4>
+                <p class="muted small">ID: {{ skill.id }}</p>
+                <p class="muted small" v-if="skill.tools?.length">工具：{{ skill.tools?.join(', ') }}</p>
+                <p class="muted small" v-if="skill.entry_allowlist?.length">入口：{{ skill.entry_allowlist?.join(', ') }}</p>
+              </div>
+              <button
+                class="secondary-button"
+                type="button"
+                :disabled="skillTogglingId === skill.id"
+                @click="handleToggleSkill(skill)"
+              >
+                <span v-if="skillTogglingId === skill.id" class="btn-spinner" aria-hidden="true" />
+                {{ skill.enabled ? '禁用' : '启用' }}
+              </button>
+            </div>
+            <p class="skill-status" :class="skill.enabled ? 'on' : 'off'">
+              {{ skill.enabled ? '已启用' : '已禁用' }}
+            </p>
+          </article>
+          <p v-if="!skills.length && !skillLoading" class="muted">当前未发现 Skill，请先放入 skill.json 再重载。</p>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
