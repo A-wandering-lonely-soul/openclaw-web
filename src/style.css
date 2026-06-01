@@ -646,6 +646,163 @@ button {
   color: #97ffc7;
 }
 
+/* ── 登录信息 & 退出按钮 ── */
+.login-info {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.logout-btn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 0.82rem;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.logout-btn:hover {
+  opacity: 0.8;
+}
+
+/* ── 页面导航 ── */
+.page-nav {
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+}
+
+.nav-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 1;
+}
+
+.nav-btn.active {
+  background: rgba(255, 223, 133, 0.14);
+  color: var(--accent);
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* ── 侧边栏快速行情 ── */
+.side-quotes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+}
+
+.side-quotes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.side-quotes-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-soft);
+  opacity: 0.6;
+}
+
+.side-quotes-refresh {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.side-quotes-refresh:hover { color: var(--accent); }
+.side-quotes-refresh:disabled { opacity: 0.4; cursor: default; }
+
+.side-quote-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.sq-label {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  flex: 0 0 auto;
+  min-width: 52px;
+}
+
+.sq-price {
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.sq-up   { color: #e85252; }
+.sq-down { color: #52c77a; }
+.sq-gold { color: #ffd700; }
+
+.sq-pct {
+  font-size: 0.72rem;
+  font-weight: 600;
+  min-width: 58px;
+  text-align: right;
+}
+
+.sq-unit {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.sq-empty {
+  margin-left: auto;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.sq-loading {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
 .skill-status.off {
   color: #ffc2cf;
 }

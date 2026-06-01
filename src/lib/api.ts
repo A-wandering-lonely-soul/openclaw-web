@@ -1,5 +1,5 @@
 import { API_BASE_URL, DEFAULT_TIMEOUT_MS } from './constants'
-import type { InstallSkillPayload, ProviderModelState, SkillsResponse } from './types'
+import type { InstallSkillPayload, ProviderModelState, ServerSession, SkillsResponse, StockQuote, GoldQuote } from './types'
 
 interface ApiErrorPayload {
   response?: string
@@ -59,6 +59,8 @@ async function requestJson<T>(path: string, init: RequestInit = {}, timeout = DE
 export async function sendChatMessage(
   prompt: string,
   chatId: string,
+  username = '',
+  sessionTitle = '',
   images?: { type: string; data: string; file_path: string }[],
 ) {
   return requestJson<{ response: string }>('/chat', {
@@ -67,6 +69,8 @@ export async function sendChatMessage(
       prompt,
       chat_id: chatId,
       entry: 'web_frontend',
+      username,
+      title: sessionTitle,
       ...(images && images.length ? { images } : {}),
     }),
   })
@@ -118,3 +122,53 @@ export async function installSkill(payload: InstallSkillPayload) {
     body: JSON.stringify(payload),
   })
 }
+
+export async function loginUser(username: string, password: string) {
+  return requestJson<{ role: string; username: string; display_name: string }>('/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  })
+}
+
+export async function fetchSessions(username: string) {
+  return requestJson<{ sessions: ServerSession[] }>(
+    `/sessions?username=${encodeURIComponent(username)}`,
+  )
+}
+
+export async function fetchSessionMessages(chatId: string) {
+  return requestJson<{ messages: Array<{ id: string; role: string; content: string; createdAt: string }> }>(
+    `/sessions/${encodeURIComponent(chatId)}/messages`,
+    {},
+    30_000,
+  )
+}
+
+export async function fetchMarketQuote(symbol: string, kind: 'stock' | 'gold' = 'stock') {
+  return requestJson<StockQuote | GoldQuote>(
+    `/market/quote?symbol=${encodeURIComponent(symbol)}&kind=${kind}`,
+    {},
+    30_000,
+  )
+}
+
+export interface WatchItem {
+  symbol: string
+  kind: 'stock' | 'gold'
+  label?: string | null
+}
+
+export async function fetchWatchlist(username: string): Promise<WatchItem[]> {
+  const res = await requestJson<{ items: WatchItem[] }>(
+    `/watchlist?username=${encodeURIComponent(username)}`,
+  )
+  return res.items
+}
+
+export async function saveWatchlist(username: string, items: WatchItem[]): Promise<void> {
+  await requestJson<{ status: string }>('/watchlist', {
+    method: 'PUT',
+    body: JSON.stringify({ username, items }),
+  })
+}
+

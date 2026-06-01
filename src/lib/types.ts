@@ -56,4 +56,43 @@ export interface InstallSkillPayload {
 
 export interface ChatSession extends SessionSummary {
   messages: ChatMessage[]
+  serverSynced?: boolean   // 该会话来自服务端历史
+  messagesLoaded?: boolean // 消息是否已从服务端加载
+}
+
+// ─── 行情数据 ───────────────────────────────────────────
+export interface StockQuote {
+  name: string
+  code: string
+  latest: number | null
+  pct_change: number | null
+  open: number | null
+  pre_close: number | null
+  high: number | null
+  low: number | null
+  volume: number | null
+  amount: number | null
+  source: string
+  granularity: string
+  data_time: string | null
+}
+
+export interface GoldQuote {
+  symbol: string
+  latest: number | null
+  change?: number | null
+  pct_change?: number | null
+  high?: number | null
+  low?: number | null
+  source: string
+  granularity: string
+  data_time: string | null
+  is_historical?: boolean
+}
+
+// ─── 服务端会话列表项 ───────────────────────────────────
+export interface ServerSession {
+  chat_id: string
+  title: string
+  updated_at: string
 }

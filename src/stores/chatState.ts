@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { STORAGE_KEY } from '@/lib/constants'
 import { makeId, trimTitle } from '@/lib/utils'
+import { fetchSessions, fetchSessionMessages } from '@/lib/api'
 import type { ChatMessage, ChatSession } from '@/lib/types'
 
 interface PersistedState {
@@ -118,6 +119,61 @@ export const useChatStateStore = defineStore('chatState', () => {
     persistState()
   }
 
+  /**
+   * 登录后从服务端拉取该用户的历史会话列表，合并到本地 sessions。
+   * 已在本地存在的会话保留原有消息；服务端独有的会话以 stub 形式插入
+   * （serverSynced=true, messagesLoaded=false），点击时懒加载消息。
+   */
+  async function loadSessionsFromServer(username: string) {
+    if (!username) return
+    try {
+      const { sessions: serverList } = await fetchSessions(username)
+      const localIds = new Set(sessions.value.map((s) => s.id))
+      const now = new Date().toISOString()
+      for (const srv of serverList) {
+        if (!localIds.has(srv.chat_id)) {
+          sessions.value.push({
+            id: srv.chat_id,
+            title: srv.title,
+            createdAt: srv.updated_at || now,
+            updatedAt: srv.updated_at || now,
+            messages: [],
+            serverSynced: true,
+            messagesLoaded: false,
+          })
+        }
+      }
+      // 按 updatedAt 倒序排列
+      sessions.value.sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      )
+      persistState()
+    } catch {
+      // 网络失败时静默，不影响已有本地会话
+    }
+  }
+
+  /**
+   * 懒加载服务端会话的消息。调用时 session.serverSynced === true。
+   */
+  async function loadSessionMessages(sessionId: string) {
+    const session = sessions.value.find((s) => s.id === sessionId)
+    if (!session || !session.serverSynced || session.messagesLoaded) return
+    try {
+      const { messages } = await fetchSessionMessages(sessionId)
+      session.messages = messages.map((m) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        createdAt: m.createdAt,
+      }))
+      session.messagesLoaded = true
+      persistState()
+    } catch {
+      // 加载失败时静默
+    }
+  }
+
   function appendMessage(sessionId: string, message: ChatMessage) {
     const session = sessions.value.find((entry) => entry.id === sessionId)
     if (!session) {
@@ -222,5 +278,7 @@ export const useChatStateStore = defineStore('chatState', () => {
     replaceSession,
     resetSession,
     deleteSession,
+    loadSessionsFromServer,
+    loadSessionMessages,
   }
 })

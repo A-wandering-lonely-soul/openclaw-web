@@ -1,18 +1,42 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { clearChatContext, fetchModelState, fetchSkills, installSkill, reloadSkills, sendChatMessage, toggleSkill, updateModelState } from '@/lib/api'
+import { clearChatContext, fetchMarketQuote, fetchModelState, fetchSkills, installSkill, reloadSkills, sendChatMessage, toggleSkill, updateModelState } from '@/lib/api'
 import { DEFAULT_MODEL_STATE, MODEL_OPTIONS, WEB_DISABLED_MODELS } from '@/lib/constants'
 import { useChatStateStore } from '@/stores/chatState'
 import { useUiSettingsStore } from '@/stores/uiSettings'
+import { useAuthStore } from '@/stores/auth'
 import { formatTime, makeId } from '@/lib/utils'
-import type { ChatMessage, ImageAttachment, ProviderModelState, SkillSummary } from '@/lib/types'
+import type { ChatMessage, GoldQuote, ImageAttachment, ProviderModelState, SkillSummary, StockQuote } from '@/lib/types'
 import MessageRenderer from '@/components/MessageRenderer.vue'
 import BlurControl from '@/components/BlurControl.vue'
+import LoginPage from '@/components/LoginPage.vue'
+import MarketPage from '@/components/MarketPage.vue'
 
 const chatStateStore = useChatStateStore()
 const uiSettingsStore = useUiSettingsStore()
-const { blurAmount, isAdmin } = storeToRefs(uiSettingsStore)
+const authStore = useAuthStore()
+const { blurAmount } = storeToRefs(uiSettingsStore)
+const { isLoggedIn, isAdmin, displayName } = storeToRefs(authStore)
+
+// ── 页面导航 ────────────────────────────────────────────
+type PageKey = 'chat' | 'market'
+const currentPage = ref<PageKey>('chat')
+
+function handleLogout() {
+  currentPage.value = 'chat'
+  authStore.logout()
+}
+
+// 登录后加载服务端历史会话
+watch(isLoggedIn, async (val) => {
+  if (val) {
+    const username = authStore.username
+    if (username) {
+      await chatStateStore.loadSessionsFromServer(username)
+    }
+  }
+})
 const { sessions, activeSessionId, activeSession } = storeToRefs(chatStateStore)
 const draft = ref('')
 const sending = ref(false)
@@ -113,6 +137,8 @@ function createNewSession() {
 function switchSession(sessionId: string) {
   chatStateStore.switchSession(sessionId)
   pageError.value = ''
+  // 懒加载服务端同步会话的历史消息
+  chatStateStore.loadSessionMessages(sessionId)
 }
 
 async function deleteSession(sessionId: string) {
@@ -219,7 +245,13 @@ async function submitMessage() {
 
   try {
     const apiImages = imagesToSend.map(({ type, data, file_path }) => ({ type, data, file_path }))
-    const result = await sendChatMessage(prompt || '(用户发送了图片)', session.id, apiImages.length ? apiImages : undefined)
+    const result = await sendChatMessage(
+      prompt || '(用户发送了图片)',
+      session.id,
+      authStore.username,
+      session.title,
+      apiImages.length ? apiImages : undefined,
+    )
     chatStateStore.patchMessage(session.id, pendingMessage.id, {
       content: result.response,
       pending: false,
@@ -375,10 +407,50 @@ async function handleInstallSkill() {
     skillInstalling.value = false
   }
 }
-</script>
+// ── 侧边栏快速行情 ───────────────────────────────────────────────────────────
+const SIDEBAR_QUICK = [
+  { symbol: 'Au99.99', kind: 'gold' as const, label: '黄金9999' },
+  { symbol: '000001', kind: 'stock' as const, label: '上证指数' },
+]
+const sideQuoteData = reactive<Record<string, StockQuote | GoldQuote | null>>({})
+const sideQuoteLoading = reactive<Record<string, boolean>>({})
+
+function sideIsStock(q: StockQuote | GoldQuote | null): q is StockQuote {
+  return q !== null && 'code' in q
+}
+function sideFmtPrice(v: number | null | undefined) {
+  if (v == null) return '—'
+  return v.toFixed(2)
+}
+function sideFmtPct(v: number | null | undefined) {
+  if (v == null) return ''
+  return (v > 0 ? '+' : '') + v.toFixed(2) + '%'
+}
+function sidePctClass(v: number | null | undefined) {
+  if (v == null) return ''
+  return v > 0 ? 'sq-up' : v < 0 ? 'sq-down' : ''
+}
+async function loadSideQuote(item: (typeof SIDEBAR_QUICK)[0]) {
+  sideQuoteLoading[item.symbol] = true
+  try {
+    sideQuoteData[item.symbol] = await fetchMarketQuote(item.symbol, item.kind)
+  } catch {
+    sideQuoteData[item.symbol] = null
+  } finally {
+    sideQuoteLoading[item.symbol] = false
+  }
+}
+async function refreshSideQuotes() {
+  await Promise.allSettled(SIDEBAR_QUICK.map(loadSideQuote))
+}
+
+onMounted(() => {
+  refreshSideQuotes()
+})</script>
 
 <template>
-  <div class="shell" :style="{ '--panel-blur': `${blurAmount}px` }">
+  <LoginPage v-if="!isLoggedIn" />
+  <div v-else class="shell" :style="{ '--panel-blur': `${blurAmount}px` }">
     <aside class="sidebar">
       <div class="brand">
         <p class="eyebrow">OpenClaw Web</p>
@@ -388,46 +460,109 @@ async function handleInstallSkill() {
             {{ isAdmin ? '管理员模式' : '游客模式' }}
           </span>
         </div>
+        <p class="login-info">{{ displayName }} · <button class="logout-btn" type="button" @click="handleLogout">退出</button></p>
       </div>
 
-      <button class="primary-button" type="button" @click="createNewSession">
-        新建会话
-      </button>
-
-      <div class="session-list">
-        <div
-          v-for="session in sessions"
-          :key="session.id"
-          class="session-card"
-          :class="{ active: session.id === activeSessionId }"
+      <!-- 页面导航 -->
+      <nav class="page-nav">
+        <button
+          type="button"
+          class="nav-btn"
+          :class="{ active: currentPage === 'chat' }"
+          @click="currentPage = 'chat'"
         >
-          <button
-            type="button"
-            class="session-delete"
-            :disabled="sending || !!deletingSessionId"
-            @click="deleteSession(session.id)"
-            aria-label="删除会话"
-            title="删除会话"
-          >
-            <span v-if="deletingSessionId === session.id" class="btn-spinner" aria-hidden="true" />
-            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h2v9H7V9Zm4 0h2v9h-2V9Zm4 0h2v9h-2V9Z" />
-            </svg>
-          </button>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+          聊天
+        </button>
+        <button
+          type="button"
+          class="nav-btn"
+          :class="{ active: currentPage === 'market' }"
+          @click="currentPage = 'market'"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+          行情
+        </button>
+      </nav>
 
-          <button
-            type="button"
-            class="session-main"
-            @click="switchSession(session.id)"
-          >
-            <span class="session-title">{{ session.title }}</span>
-            <span class="session-meta">{{ formatTime(session.updatedAt) }}</span>
+      <!-- 侧边栏快速行情（仅行情页显示）-->
+      <div v-if="currentPage === 'market'" class="side-quotes">
+        <div class="side-quotes-head">
+          <span class="side-quotes-label">行情</span>
+          <button class="side-quotes-refresh" :disabled="Object.values(sideQuoteLoading).some(Boolean)" @click="refreshSideQuotes" title="刷新">
+            <span v-if="Object.values(sideQuoteLoading).some(Boolean)" class="btn-spinner" aria-hidden="true" />
+            <span v-else>↺</span>
           </button>
         </div>
+        <div v-for="item in SIDEBAR_QUICK" :key="item.symbol" class="side-quote-row">
+          <span class="sq-label">{{ item.label }}</span>
+          <template v-if="sideQuoteLoading[item.symbol]">
+            <span class="sq-loading"><span class="btn-spinner" aria-hidden="true" /></span>
+          </template>
+          <template v-else-if="sideQuoteData[item.symbol]">
+            <template v-if="sideIsStock(sideQuoteData[item.symbol])">
+              <span class="sq-price" :class="sidePctClass((sideQuoteData[item.symbol] as StockQuote).pct_change)">
+                {{ sideFmtPrice((sideQuoteData[item.symbol] as StockQuote).latest) }}
+              </span>
+              <span class="sq-pct" :class="sidePctClass((sideQuoteData[item.symbol] as StockQuote).pct_change)">
+                {{ sideFmtPct((sideQuoteData[item.symbol] as StockQuote).pct_change) }}
+              </span>
+            </template>
+            <template v-else>
+              <span class="sq-price sq-gold">
+                {{ sideFmtPrice((sideQuoteData[item.symbol] as GoldQuote).latest) }}
+              </span>
+              <span class="sq-unit">元/克</span>
+            </template>
+          </template>
+          <span v-else class="sq-empty">—</span>
+        </div>
       </div>
+
+      <template v-if="currentPage === 'chat'">
+        <button class="primary-button" type="button" @click="createNewSession">
+          新建会话
+        </button>
+
+        <div class="session-list">
+          <div
+            v-for="session in sessions"
+            :key="session.id"
+            class="session-card"
+            :class="{ active: session.id === activeSessionId }"
+          >
+            <button
+              type="button"
+              class="session-delete"
+              :disabled="sending || !!deletingSessionId"
+              @click="deleteSession(session.id)"
+              aria-label="删除会话"
+              title="删除会话"
+            >
+              <span v-if="deletingSessionId === session.id" class="btn-spinner" aria-hidden="true" />
+              <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h2v9H7V9Zm4 0h2v9h-2V9Zm4 0h2v9h-2V9Z" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              class="session-main"
+              @click="switchSession(session.id)"
+            >
+              <span class="session-title">{{ session.title }}</span>
+              <span class="session-meta">{{ formatTime(session.updatedAt) }}</span>
+            </button>
+          </div>
+        </div>
+      </template>
     </aside>
 
-    <main class="panel" v-if="activeSession">
+    <!-- 行情页 -->
+    <MarketPage v-if="currentPage === 'market'" class="panel" />
+
+    <!-- 聊天页 -->
+    <main class="panel" v-if="currentPage === 'chat' && activeSession">
       <header class="toolbar">
         <div>
           <p class="eyebrow">当前会话</p>
