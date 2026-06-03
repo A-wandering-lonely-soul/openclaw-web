@@ -31,10 +31,7 @@ function handleLogout() {
 // 登录后加载服务端历史会话
 watch(isLoggedIn, async (val) => {
   if (val) {
-    const username = authStore.username
-    if (username) {
-      await chatStateStore.loadSessionsFromServer(username)
-    }
+    await chatStateStore.loadSessionsFromServer()
   }
 })
 const { sessions, activeSessionId, activeSession } = storeToRefs(chatStateStore)
@@ -248,7 +245,6 @@ async function submitMessage() {
     const result = await sendChatMessage(
       prompt || '(用户发送了图片)',
       session.id,
-      authStore.username,
       session.title,
       apiImages.length ? apiImages : undefined,
     )
@@ -415,8 +411,8 @@ const SIDEBAR_QUICK = [
 const sideQuoteData = reactive<Record<string, StockQuote | GoldQuote | null>>({})
 const sideQuoteLoading = reactive<Record<string, boolean>>({})
 
-function sideIsStock(q: StockQuote | GoldQuote | null): q is StockQuote {
-  return q !== null && 'code' in q
+function sideIsStock(q: StockQuote | GoldQuote | null | undefined): q is StockQuote {
+  return q != null && 'code' in q
 }
 function sideFmtPrice(v: number | null | undefined) {
   if (v == null) return '—'
@@ -446,7 +442,8 @@ async function refreshSideQuotes() {
 
 onMounted(() => {
   refreshSideQuotes()
-})</script>
+})
+</script>
 
 <template>
   <LoginPage v-if="!isLoggedIn" />

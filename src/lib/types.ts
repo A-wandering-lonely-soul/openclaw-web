@@ -90,6 +90,19 @@ export interface GoldQuote {
   is_historical?: boolean
 }
 
+export interface IntradayPoint {
+  time: string
+  price: number
+}
+
+export interface StockIntraday {
+  symbol: string
+  name: string
+  source: string
+  date?: string
+  points: IntradayPoint[]
+}
+
 // ─── 服务端会话列表项 ───────────────────────────────────
 export interface ServerSession {
   chat_id: string

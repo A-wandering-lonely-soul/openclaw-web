@@ -1,5 +1,6 @@
 import { API_BASE_URL, DEFAULT_TIMEOUT_MS } from './constants'
-import type { InstallSkillPayload, ProviderModelState, ServerSession, SkillsResponse, StockQuote, GoldQuote } from './types'
+import type { InstallSkillPayload, ProviderModelState, ServerSession, SkillsResponse, StockQuote, GoldQuote, StockIntraday } from './types'
+import { AUTH_KEY, type AuthState } from '@/stores/auth'
 
 interface ApiErrorPayload {
   response?: string
@@ -23,10 +24,22 @@ async function requestJson<T>(path: string, init: RequestInit = {}, timeout = DE
   const timer = window.setTimeout(() => controller.abort(), timeout)
 
   try {
+    let authToken = ''
+    try {
+      const raw = window.localStorage.getItem(AUTH_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as AuthState
+        authToken = parsed.token || ''
+      }
+    } catch {
+      // ignore auth parse errors
+    }
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         ...(init.headers || {}),
       },
       signal: controller.signal,
@@ -59,7 +72,6 @@ async function requestJson<T>(path: string, init: RequestInit = {}, timeout = DE
 export async function sendChatMessage(
   prompt: string,
   chatId: string,
-  username = '',
   sessionTitle = '',
   images?: { type: string; data: string; file_path: string }[],
 ) {
@@ -69,7 +81,6 @@ export async function sendChatMessage(
       prompt,
       chat_id: chatId,
       entry: 'web_frontend',
-      username,
       title: sessionTitle,
       ...(images && images.length ? { images } : {}),
     }),
@@ -79,7 +90,7 @@ export async function sendChatMessage(
 export async function clearChatContext(chatId: string) {
   return requestJson<{ status: string }>('/clear_context', {
     method: 'POST',
-    body: JSON.stringify({ chat_id: chatId }),
+    body: JSON.stringify({ chat_id: chatId, entry: 'web_frontend' }),
   })
 }
 
@@ -124,16 +135,14 @@ export async function installSkill(payload: InstallSkillPayload) {
 }
 
 export async function loginUser(username: string, password: string) {
-  return requestJson<{ role: string; username: string; display_name: string }>('/login', {
+  return requestJson<{ user_id: number; role: string; username: string; display_name: string; token: string }>('/login', {
     method: 'POST',
     body: JSON.stringify({ username, password }),
   })
 }
 
-export async function fetchSessions(username: string) {
-  return requestJson<{ sessions: ServerSession[] }>(
-    `/sessions?username=${encodeURIComponent(username)}`,
-  )
+export async function fetchSessions() {
+  return requestJson<{ sessions: ServerSession[] }>('/sessions')
 }
 
 export async function fetchSessionMessages(chatId: string) {
@@ -152,23 +161,29 @@ export async function fetchMarketQuote(symbol: string, kind: 'stock' | 'gold' = 
   )
 }
 
+export async function fetchStockIntraday(symbol: string) {
+  return requestJson<StockIntraday>(
+    `/market/intraday?symbol=${encodeURIComponent(symbol)}`,
+    {},
+    30_000,
+  )
+}
+
 export interface WatchItem {
   symbol: string
   kind: 'stock' | 'gold'
   label?: string | null
 }
 
-export async function fetchWatchlist(username: string): Promise<WatchItem[]> {
-  const res = await requestJson<{ items: WatchItem[] }>(
-    `/watchlist?username=${encodeURIComponent(username)}`,
-  )
+export async function fetchWatchlist(): Promise<WatchItem[]> {
+  const res = await requestJson<{ items: WatchItem[] }>('/watchlist')
   return res.items
 }
 
-export async function saveWatchlist(username: string, items: WatchItem[]): Promise<void> {
+export async function saveWatchlist(items: WatchItem[]): Promise<void> {
   await requestJson<{ status: string }>('/watchlist', {
     method: 'PUT',
-    body: JSON.stringify({ username, items }),
+    body: JSON.stringify({ items }),
   })
 }
 

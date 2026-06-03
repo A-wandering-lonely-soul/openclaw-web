@@ -1,12 +1,14 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-const AUTH_KEY = 'openclaw-auth'
+export const AUTH_KEY = 'openclaw-auth'
 
-interface AuthState {
+export interface AuthState {
+  userId: number
   username: string
   role: 'guest' | 'admin'
   displayName: string
+  token: string
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -16,6 +18,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => auth.value?.role === 'admin')
   const displayName = computed(() => auth.value?.displayName ?? '')
   const username = computed(() => auth.value?.username ?? '')
+  const token = computed(() => auth.value?.token ?? '')
 
   function load() {
     try {
@@ -40,5 +43,5 @@ export const useAuthStore = defineStore('auth', () => {
 
   load()
 
-  return { isLoggedIn, isAdmin, displayName, username, setAuth, logout }
+  return { isLoggedIn, isAdmin, displayName, username, token, setAuth, logout }
 })

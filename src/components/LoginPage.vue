@@ -21,9 +21,11 @@ async function loginAsGuest() {
   try {
     const res = await loginUser('admin', '123456')
     authStore.setAuth({
+      userId: res.user_id,
       username: res.username,
       role: res.role as 'guest' | 'admin',
       displayName: res.display_name,
+      token: res.token,
     })
   } catch (e) {
     error.value = e instanceof Error ? e.message : '登录失败'
@@ -42,9 +44,11 @@ async function loginAsAdmin() {
   try {
     const res = await loginUser(adminUsername.value.trim(), adminPassword.value)
     authStore.setAuth({
+      userId: res.user_id,
       username: res.username,
       role: res.role as 'guest' | 'admin',
       displayName: res.display_name,
+      token: res.token,
     })
   } catch (e) {
     error.value = e instanceof Error ? e.message : '登录失败'

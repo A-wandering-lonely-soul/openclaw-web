@@ -124,10 +124,9 @@ export const useChatStateStore = defineStore('chatState', () => {
    * 已在本地存在的会话保留原有消息；服务端独有的会话以 stub 形式插入
    * （serverSynced=true, messagesLoaded=false），点击时懒加载消息。
    */
-  async function loadSessionsFromServer(username: string) {
-    if (!username) return
+  async function loadSessionsFromServer() {
     try {
-      const { sessions: serverList } = await fetchSessions(username)
+      const { sessions: serverList } = await fetchSessions()
       const localIds = new Set(sessions.value.map((s) => s.id))
       const now = new Date().toISOString()
       for (const srv of serverList) {

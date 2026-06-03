@@ -1,9 +1,10 @@
 ﻿<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { fetchMarketQuote, fetchWatchlist, saveWatchlist, type WatchItem } from '@/lib/api'
+import { fetchMarketQuote, fetchStockIntraday, fetchWatchlist, saveWatchlist, type WatchItem } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
-import type { StockQuote, GoldQuote } from '@/lib/types'
+import type { StockQuote, GoldQuote, StockIntraday } from '@/lib/types'
+import ChartBlock from '@/components/ChartBlock.vue'
 
 const { username } = storeToRefs(useAuthStore())
 
@@ -23,6 +24,10 @@ const searchKind = ref<'stock' | 'gold'>('stock')
 const searchResult = ref<StockQuote | GoldQuote | null>(null)
 const searchError = ref('')
 const searching = ref(false)
+const intraday = ref<StockIntraday | null>(null)
+const intradayLoading = ref(false)
+const intradayError = ref('')
+const intradayChartData = ref('')
 
 // ── 自选 ─────────────────────────────────────────────────────────────────────
 const watchlist = ref<WatchItem[]>([])
@@ -30,11 +35,16 @@ const watchlistLoading = ref(true)
 const watchData = reactive<Record<string, StockQuote | GoldQuote | null>>({})
 const watchLoading = reactive<Record<string, boolean>>({})
 const watchError = reactive<Record<string, string>>({})
+const selectedWatchSymbol = ref('')
+const selectedWatchName = ref('')
+const watchIntradayLoading = ref(false)
+const watchIntradayError = ref('')
+const watchIntradayChartData = ref('')
 
 async function persistWatchlist() {
   if (!username.value) return
   try {
-    await saveWatchlist(username.value, watchlist.value)
+    await saveWatchlist(watchlist.value)
   } catch (e) {
     console.error('[watchlist] save failed', e)
   }
@@ -74,8 +84,38 @@ function fmtAmt(v: number | null | undefined): string {
   if (n >= 1e4) return `${(n / 1e4).toFixed(2)}万`
   return String(n)
 }
-function isStock(q: StockQuote | GoldQuote | null): q is StockQuote {
-  return q !== null && 'code' in q
+function isStock(q: StockQuote | GoldQuote | null | undefined): q is StockQuote {
+  return q != null && 'code' in q
+}
+
+function buildIntradayChartData(data: StockIntraday): string {
+  return JSON.stringify({
+    type: 'line',
+    title: `${data.name || data.symbol} 当日分时`,
+    xAxis: data.points.map((p) => p.time),
+    series: [
+      {
+        name: '价格',
+        data: data.points.map((p) => Number(p.price.toFixed(2))),
+      },
+    ],
+  })
+}
+
+async function loadIntraday(symbol: string) {
+  intradayLoading.value = true
+  intradayError.value = ''
+  intraday.value = null
+  intradayChartData.value = ''
+  try {
+    const data = await fetchStockIntraday(symbol)
+    intraday.value = data
+    intradayChartData.value = buildIntradayChartData(data)
+  } catch (e: unknown) {
+    intradayError.value = e instanceof Error ? e.message : '分时图加载失败'
+  } finally {
+    intradayLoading.value = false
+  }
 }
 
 // ── 搜索操作 ─────────────────────────────────────────────────────────────────
@@ -87,8 +127,18 @@ async function doSearch() {
   searchResult.value = null
   try {
     searchResult.value = await fetchMarketQuote(sym, searchKind.value)
+    if (searchKind.value === 'stock' && searchResult.value && isStock(searchResult.value)) {
+      await loadIntraday((searchResult.value as StockQuote).code)
+    } else {
+      intraday.value = null
+      intradayChartData.value = ''
+      intradayError.value = ''
+    }
   } catch (e: unknown) {
     searchError.value = e instanceof Error ? e.message : '查询失败'
+    intraday.value = null
+    intradayChartData.value = ''
+    intradayError.value = ''
   } finally {
     searching.value = false
   }
@@ -122,8 +172,71 @@ async function refreshAllWatch() {
   await Promise.allSettled(watchlist.value.map(loadWatch))
 }
 function removeWatch(item: WatchItem) {
+  if (selectedWatchSymbol.value === item.symbol) {
+    selectedWatchSymbol.value = ''
+    selectedWatchName.value = ''
+    watchIntradayChartData.value = ''
+    watchIntradayError.value = ''
+  }
   watchlist.value = watchlist.value.filter((w) => w.symbol !== item.symbol)
   persistWatchlist()
+}
+
+function getWatchDisplayName(item: WatchItem): string {
+  const quote = watchData[item.symbol]
+  if (quote && isStock(quote)) {
+    return quote.name || item.label || item.symbol
+  }
+  return item.label || item.symbol
+}
+
+async function selectWatchRow(item: WatchItem) {
+  if (selectedWatchSymbol.value === item.symbol) {
+    selectedWatchSymbol.value = ''
+    selectedWatchName.value = ''
+    watchIntradayChartData.value = ''
+    watchIntradayError.value = ''
+    watchIntradayLoading.value = false
+    return
+  }
+
+  selectedWatchSymbol.value = item.symbol
+  selectedWatchName.value = getWatchDisplayName(item)
+
+  if (item.kind !== 'stock') {
+    watchIntradayLoading.value = false
+    watchIntradayChartData.value = ''
+    watchIntradayError.value = '黄金暂不支持分时走势图'
+    return
+  }
+
+  watchIntradayLoading.value = true
+  watchIntradayError.value = ''
+  watchIntradayChartData.value = ''
+  try {
+    const data = await fetchStockIntraday(item.symbol)
+    watchIntradayChartData.value = buildIntradayChartData(data)
+  } catch (e: unknown) {
+    watchIntradayError.value = e instanceof Error ? e.message : '分时图加载失败'
+  } finally {
+    watchIntradayLoading.value = false
+  }
+}
+
+async function refreshSelectedWatchIntraday(item: WatchItem) {
+  if (item.kind !== 'stock') return
+  watchIntradayLoading.value = true
+  watchIntradayError.value = ''
+  watchIntradayChartData.value = ''
+  try {
+    const data = await fetchStockIntraday(item.symbol)
+    selectedWatchName.value = data.name || selectedWatchName.value || item.label || item.symbol
+    watchIntradayChartData.value = buildIntradayChartData(data)
+  } catch (e: unknown) {
+    watchIntradayError.value = e instanceof Error ? e.message : '分时图加载失败'
+  } finally {
+    watchIntradayLoading.value = false
+  }
 }
 
 // ── 添加自选 ─────────────────────────────────────────────────────────────────
@@ -155,7 +268,7 @@ onMounted(async () => {
   watchlistLoading.value = true
   try {
     if (username.value) {
-      const items = await fetchWatchlist(username.value)
+      const items = await fetchWatchlist()
       watchlist.value = items.length ? items : [...DEFAULT_WATCHLIST]
       // 首次（空数据）写入默认值
       if (!items.length) persistWatchlist()
@@ -240,6 +353,17 @@ onMounted(async () => {
         </template>
         <button class="add-watch-btn" @click="addSearchToWatchlist">＋ 加入自选</button>
       </div>
+
+      <div v-if="isStock(searchResult)" class="quote-card intraday-card">
+        <div class="quote-head">
+          <span class="q-name">当日走势图</span>
+          <span class="q-code">{{ (searchResult as StockQuote).code }}</span>
+          <button class="icon-btn" :disabled="intradayLoading" title="刷新分时图" @click="loadIntraday((searchResult as StockQuote).code)">↺</button>
+        </div>
+        <div v-if="intradayLoading" class="empty-hint">分时图加载中…</div>
+        <div v-else-if="intradayError" class="error-msg">{{ intradayError }}</div>
+        <ChartBlock v-else-if="intradayChartData" :data="intradayChartData" />
+      </div>
     </section>
 
     <!-- 自选 -->
@@ -277,37 +401,63 @@ onMounted(async () => {
       </div>
       <div v-else-if="!watchlist.length" class="empty-hint">暂无自选，点击「＋ 添加」或搜索后加入</div>
       <div class="watch-list">
-        <div v-for="item in watchlist" :key="item.symbol" class="watch-row">
-          <div class="watch-info">
-            <template v-if="watchData[item.symbol]">
-              <template v-if="isStock(watchData[item.symbol])">
-                <span class="w-name">{{ item.label || (watchData[item.symbol] as StockQuote).name }}</span>
-                <span class="w-code">{{ item.symbol }}</span>
-                <span class="w-price" :class="pctClass((watchData[item.symbol] as StockQuote).pct_change)">
-                  {{ fmtPrice((watchData[item.symbol] as StockQuote).latest) }}
-                </span>
-                <span class="w-pct" :class="pctClass((watchData[item.symbol] as StockQuote).pct_change)">
-                  {{ fmtPct((watchData[item.symbol] as StockQuote).pct_change) }}
-                </span>
+        <template v-for="item in watchlist" :key="item.symbol">
+          <div
+            class="watch-row"
+            :class="{ selected: selectedWatchSymbol === item.symbol }"
+            @click="selectWatchRow(item)"
+          >
+            <div class="watch-info">
+              <template v-if="watchData[item.symbol]">
+                <template v-if="isStock(watchData[item.symbol])">
+                  <span class="w-name">{{ item.label || (watchData[item.symbol] as StockQuote).name }}</span>
+                  <span class="w-code">{{ item.symbol }}</span>
+                  <span class="w-price" :class="pctClass((watchData[item.symbol] as StockQuote).pct_change)">
+                    {{ fmtPrice((watchData[item.symbol] as StockQuote).latest) }}
+                  </span>
+                  <span class="w-pct" :class="pctClass((watchData[item.symbol] as StockQuote).pct_change)">
+                    {{ fmtPct((watchData[item.symbol] as StockQuote).pct_change) }}
+                  </span>
+                </template>
+                <template v-else>
+                  <span class="w-name">{{ item.label || item.symbol }}</span>
+                  <span class="gold-badge">黄金</span>
+                  <span class="w-price gold">{{ fmtPrice((watchData[item.symbol] as GoldQuote).latest) }}</span>
+                  <span class="w-unit">元/克</span>
+                </template>
               </template>
               <template v-else>
                 <span class="w-name">{{ item.label || item.symbol }}</span>
-                <span class="gold-badge">黄金</span>
-                <span class="w-price gold">{{ fmtPrice((watchData[item.symbol] as GoldQuote).latest) }}</span>
-                <span class="w-unit">元/克</span>
+                <span class="w-code">{{ item.symbol }}</span>
+                <span class="w-status">{{ watchLoading[item.symbol] ? '加载中…' : (watchError[item.symbol] || '—') }}</span>
               </template>
-            </template>
-            <template v-else>
-              <span class="w-name">{{ item.label || item.symbol }}</span>
-              <span class="w-code">{{ item.symbol }}</span>
-              <span class="w-status">{{ watchLoading[item.symbol] ? '加载中…' : (watchError[item.symbol] || '—') }}</span>
-            </template>
+            </div>
+            <div class="watch-actions">
+              <button class="icon-btn" title="刷新" @click.stop="loadWatch(item)">↺</button>
+              <button class="icon-btn danger" title="删除" @click.stop="removeWatch(item)">✕</button>
+            </div>
           </div>
-          <div class="watch-actions">
-            <button class="icon-btn" title="刷新" @click="loadWatch(item)">↺</button>
-            <button class="icon-btn danger" title="删除" @click="removeWatch(item)">✕</button>
-          </div>
-        </div>
+
+          <transition name="expand-chart">
+            <div v-if="selectedWatchSymbol === item.symbol" class="watch-inline-chart">
+              <div class="quote-head">
+                <span class="q-name">当日走势</span>
+                <span class="q-code">{{ item.symbol }}</span>
+                <span class="q-source">{{ selectedWatchName }}</span>
+                <button
+                  v-if="item.kind === 'stock'"
+                  class="icon-btn"
+                  :disabled="watchIntradayLoading"
+                  title="刷新分时图"
+                  @click.stop="refreshSelectedWatchIntraday(item)"
+                >↺</button>
+              </div>
+              <div v-if="watchIntradayLoading" class="empty-hint">分时图加载中…</div>
+              <div v-else-if="watchIntradayError" class="error-msg">{{ watchIntradayError }}</div>
+              <ChartBlock v-else-if="watchIntradayChartData" :data="watchIntradayChartData" />
+            </div>
+          </transition>
+        </template>
       </div>
     </section>
   </div>
@@ -595,10 +745,43 @@ onMounted(async () => {
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 10px;
   gap: 10px;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
+  cursor: pointer;
 }
 
 .watch-row:hover { background: rgba(255, 255, 255, 0.09); }
+.watch-row.selected {
+  border-color: rgba(255, 223, 133, 0.5);
+  background: rgba(255, 223, 133, 0.1);
+}
+
+.watch-inline-chart {
+  margin: 6px 0 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 223, 133, 0.28);
+  background: rgba(255, 223, 133, 0.07);
+  overflow: hidden;
+}
+
+.expand-chart-enter-active,
+.expand-chart-leave-active {
+  transition: all 0.28s ease;
+}
+
+.expand-chart-enter-from,
+.expand-chart-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+  max-height: 0;
+}
+
+.expand-chart-enter-to,
+.expand-chart-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 520px;
+}
 
 .watch-info {
   flex: 1;
