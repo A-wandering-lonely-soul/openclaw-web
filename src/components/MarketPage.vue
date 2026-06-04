@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { fetchMarketQuote, fetchStockIntraday, fetchWatchlist, saveWatchlist, type WatchItem } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
@@ -55,6 +55,31 @@ const addSymbol = ref('')
 const addKind = ref<'stock' | 'gold'>('stock')
 const addError = ref('')
 const adding = ref(false)
+const addSuccess = ref('')
+let addSuccessTimer: number | null = null
+
+function showAddSuccess(message: string) {
+  addSuccess.value = message
+  if (addSuccessTimer != null) {
+    window.clearTimeout(addSuccessTimer)
+  }
+  addSuccessTimer = window.setTimeout(() => {
+    addSuccess.value = ''
+    addSuccessTimer = null
+  }, 2200)
+}
+
+const searchResultSymbol = computed(() => {
+  if (!searchResult.value) return ''
+  return isStock(searchResult.value)
+    ? (searchResult.value as StockQuote).code
+    : (searchResult.value as GoldQuote).symbol
+})
+
+const searchAlreadyJoined = computed(() => {
+  const sym = searchResultSymbol.value
+  return !!sym && watchlist.value.some((w) => w.symbol === sym)
+})
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtPrice(v: number | null | undefined): string {
@@ -153,6 +178,7 @@ function addSearchToWatchlist() {
   watchlist.value.unshift({ symbol: sym, kind: searchKind.value })
   persistWatchlist()
   watchData[sym] = searchResult.value
+  showAddSuccess(`${sym} 已加入自选`)
 }
 
 // ── 自选操作 ─────────────────────────────────────────────────────────────────
@@ -256,12 +282,19 @@ async function confirmAdd() {
     watchData[sym] = quote
     addSymbol.value = ''
     showAddForm.value = false
+    showAddSuccess(`${sym} 已加入自选`)
   } catch (e: unknown) {
     addError.value = e instanceof Error ? e.message : '未找到该标的，请检查代码'
   } finally {
     adding.value = false
   }
 }
+
+onUnmounted(() => {
+  if (addSuccessTimer != null) {
+    window.clearTimeout(addSuccessTimer)
+  }
+})
 
 onMounted(async () => {
   // 从服务端加载自选
@@ -293,6 +326,9 @@ onMounted(async () => {
     <!-- 行情查询 -->
     <section class="section">
       <div class="section-title">行情查询</div>
+      <transition name="fade-slide">
+        <div v-if="addSuccess" class="success-msg">{{ addSuccess }}</div>
+      </transition>
       <div class="search-bar">
         <select v-model="searchKind" class="kind-select">
           <option value="stock">股票/指数/ETF</option>
@@ -351,7 +387,16 @@ onMounted(async () => {
             {{ (searchResult as GoldQuote).data_time }}
           </div>
         </template>
-        <button class="add-watch-btn" @click="addSearchToWatchlist">＋ 加入自选</button>
+        <button
+          v-if="searchAlreadyJoined"
+          class="add-watch-btn joined"
+          disabled
+        >✓ 已加入自选</button>
+        <button
+          v-else
+          class="add-watch-btn"
+          @click="addSearchToWatchlist"
+        >＋ 加入自选</button>
       </div>
 
       <div v-if="isStock(searchResult)" class="quote-card intraday-card">
@@ -715,6 +760,17 @@ onMounted(async () => {
 
 .add-watch-btn:hover { background: rgba(255, 223, 133, 0.2); }
 
+.add-watch-btn.joined {
+  background: rgba(82, 199, 122, 0.14);
+  border-color: rgba(82, 199, 122, 0.45);
+  color: #8be3a8;
+  cursor: not-allowed;
+}
+
+.add-watch-btn.joined:hover {
+  background: rgba(82, 199, 122, 0.14);
+}
+
 .card-refresh-btn {
   position: absolute;
   top: 12px;
@@ -851,6 +907,26 @@ onMounted(async () => {
   background: rgba(255, 142, 171, 0.08);
   border: 1px solid rgba(255, 142, 171, 0.2);
   border-radius: 8px;
+}
+
+.success-msg {
+  color: #9ef3bd;
+  font-size: 0.83rem;
+  padding: 8px 12px;
+  background: rgba(82, 199, 122, 0.12);
+  border: 1px solid rgba(82, 199, 122, 0.35);
+  border-radius: 8px;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-3px);
 }
 
 .hist-warn { font-size: 0.75rem; color: #ffc107; margin-top: 4px; }
