@@ -489,7 +489,7 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <p class="login-info">{{ displayName }} · <button class="logout-btn" type="button" @click="handleLogout">退出</button></p>
+        <!-- <p class="login-info">{{ displayName }} · <button class="logout-btn" type="button" @click="handleLogout">退出</button></p> -->
       </div>
 
       <!-- 页面导航 -->
