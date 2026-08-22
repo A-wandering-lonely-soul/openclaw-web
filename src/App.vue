@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { clearChatContext, fetchModelState, fetchSkills, installSkill, reloadSkills, sendChatMessage, toggleSkill, updateModelState } from '@/lib/api'
 import { DEFAULT_MODEL_STATE, MODEL_OPTIONS, WEB_DISABLED_MODELS } from '@/lib/constants'
 import { useChatStateStore } from '@/stores/chatState'
 import { useUiSettingsStore } from '@/stores/uiSettings'
+import { useAuthStore } from '@/stores/auth'
 import { formatTime, makeId } from '@/lib/utils'
 import type { ChatMessage, ImageAttachment, ProviderModelState, SkillSummary } from '@/lib/types'
 import MessageRenderer from '@/components/MessageRenderer.vue'
 import BlurControl from '@/components/BlurControl.vue'
+import LoginPage from '@/components/LoginPage.vue'
 
 const chatStateStore = useChatStateStore()
 const uiSettingsStore = useUiSettingsStore()
-const { blurAmount, isAdmin } = storeToRefs(uiSettingsStore)
+const authStore = useAuthStore()
+const { blurAmount } = storeToRefs(uiSettingsStore)
+const { isLoggedIn, isAdmin, displayName } = storeToRefs(authStore)
 const { sessions, activeSessionId, activeSession } = storeToRefs(chatStateStore)
 const draft = ref('')
 const sending = ref(false)
@@ -60,6 +64,26 @@ function isModelDisabledInWeb(model: string) {
 }
 
 onMounted(async () => {
+  if (!isLoggedIn.value) {
+    return
+  }
+
+  const firstSession = sessions.value[0]
+  if (!activeSession.value && firstSession) {
+    activeSessionId.value = firstSession.id
+  }
+
+  await refreshModelState()
+  await refreshSkills()
+})
+
+watch(isLoggedIn, async (loggedIn) => {
+  if (!loggedIn) {
+    showSkillPanel.value = false
+    pageError.value = ''
+    return
+  }
+
   const firstSession = sessions.value[0]
   if (!activeSession.value && firstSession) {
     activeSessionId.value = firstSession.id
@@ -103,6 +127,13 @@ function getErrorMessage(error: unknown, fallback: string) {
     return error.message
   }
   return fallback
+}
+
+function switchMode() {
+  showSkillPanel.value = false
+  pageError.value = ''
+  authStore.logout()
+  window.history.replaceState({}, document.title, window.location.pathname)
 }
 
 function createNewSession() {
@@ -219,7 +250,7 @@ async function submitMessage() {
 
   try {
     const apiImages = imagesToSend.map(({ type, data, file_path }) => ({ type, data, file_path }))
-    const result = await sendChatMessage(prompt || '(用户发送了图片)', session.id, apiImages.length ? apiImages : undefined)
+    const result = await sendChatMessage(prompt || '(用户发送了图片)', session.id, session.title, apiImages.length ? apiImages : undefined)
     chatStateStore.patchMessage(session.id, pendingMessage.id, {
       content: result.response,
       pending: false,
@@ -378,15 +409,30 @@ async function handleInstallSkill() {
 </script>
 
 <template>
-  <div class="shell" :style="{ '--panel-blur': `${blurAmount}px` }">
+  <LoginPage v-if="!isLoggedIn" />
+  <div v-else class="shell" :style="{ '--panel-blur': `${blurAmount}px` }">
     <aside class="sidebar">
       <div class="brand">
         <p class="eyebrow">OpenClaw Web</p>
         <div class="brand-title">
           <h1>指挥室</h1>
-          <span class="role-badge" :class="isAdmin ? 'admin' : 'guest'">
-            {{ isAdmin ? '管理员模式' : '游客模式' }}
-          </span>
+          <div class="role-switcher">
+            <button
+              type="button"
+              class="role-badge"
+              :class="isAdmin ? 'admin' : 'guest'"
+              aria-haspopup="dialog"
+              :title="displayName || undefined"
+            >
+              {{ isAdmin ? '管理员模式' : '游客模式' }}
+            </button>
+            <div class="role-switch-popover" role="dialog" aria-label="切换模式">
+              <p>切换模式将退出当前身份并回到登录页。</p>
+              <button class="secondary-button role-switch-action" type="button" @click="switchMode">
+                切换模式
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

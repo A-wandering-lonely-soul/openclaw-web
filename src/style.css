@@ -111,6 +111,9 @@ button {
 }
 
 .sidebar {
+  position: relative;
+  z-index: 4;
+  overflow: visible;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -123,7 +126,20 @@ button {
   gap: 0.8rem;
 }
 
+.brand {
+  position: relative;
+  z-index: 12;
+}
+
+.role-switcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  z-index: 16;
+}
+
 .role-badge {
+  border: 0;
   font-size: 0.75rem;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
@@ -131,6 +147,45 @@ button {
   letter-spacing: 0.05em;
   white-space: nowrap;
   margin-top: 4px; /* 对齐有顶部 margin 的 h1 */
+  cursor: pointer;
+}
+
+.role-switch-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 220px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(17, 23, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  display: grid;
+  gap: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 32;
+}
+
+.role-switch-popover p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: rgba(245, 238, 255, 0.85);
+}
+
+.role-switcher:hover .role-switch-popover,
+.role-switcher:focus-within .role-switch-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.role-switch-action {
+  width: 100%;
+  justify-content: center;
 }
 
 .role-badge.admin {
@@ -206,7 +261,6 @@ button {
 
 .primary-button:hover,
 .secondary-button:hover,
-.session-main:hover,
 .session-delete:hover {
   transform: translateY(-2px) scale(1.02);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), inset 0 1px 1px rgba(255, 255, 255, 1);
@@ -223,6 +277,8 @@ button {
   flex-direction: column;
   gap: 10px;
   overflow: auto;
+  position: relative;
+  z-index: 1;
 }
 
 .session-card {
@@ -234,13 +290,20 @@ button {
 }
 
 .session-main {
+  position: relative;
+  z-index: 1;
   width: 100%;
   text-align: left;
-  padding: 14px 12px 10px;
+  padding: 14px 44px 10px 12px;
   background: transparent;
   color: inherit;
   display: grid;
   gap: 8px;
+}
+
+.session-main:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.9);
 }
 
 .session-card.active {
@@ -251,6 +314,7 @@ button {
 
 .session-delete {
   position: absolute;
+  z-index: 3;
   top: 10px;
   right: 10px;
   width: 30px;

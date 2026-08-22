@@ -4,7 +4,8 @@ OpenClaw 的网页聊天前端，基于 Vue 3 + TypeScript + Vite。
 
 ## 功能
 
-- 单页聊天界面，无登录页
+- 登录页模式选择：支持游客登录和管理员登录
+- 右上角支持切换模式，退出当前身份后返回登录页
 - 多会话切换，按 chat_id 隔离上下文
 - 删除单条会话时，同时清理该 chat_id 的后端上下文
 - 读取并切换后端当前模型
@@ -18,6 +19,8 @@ OpenClaw 的网页聊天前端，基于 Vue 3 + TypeScript + Vite。
 
 ## 最近更新
 
+- 恢复历史登录页样式与认证流程，对齐远端前端分支。
+- 恢复游客/管理员模式切换，切换后回到登录页重新选择身份。
 - 新增 Ollama provider 在前端下拉可见并可切换。
 - 新增 Ollama 模型分层：Web 默认仅暴露 3B 轻量模型；重型模型由后端或运维侧控制。
 - Web 端模型禁用策略扩展到 Ollama 重型模型，降低低配服务器 504 风险。
@@ -34,6 +37,7 @@ OpenClaw 的网页聊天前端，基于 Vue 3 + TypeScript + Vite。
 - Node.js 22+
 - npm 10+
 - OpenClaw 后端已启动，默认地址 http://localhost:8000
+- 后端需提供 `/api/login` 与 Bearer Token 鉴权能力
 
 ## 启动方式
 
@@ -57,6 +61,13 @@ npm run dev
 
 默认会在 http://localhost:5173 启动。
 
+## 登录与切换模式
+
+- 默认进入登录页，可选择游客登录或管理员登录。
+- 管理员入口支持 `http://localhost:5173/?code=1111011`，会直接切到管理员登录表单。
+- 登录成功后，右上角身份标识支持切换模式；切换时会退出当前身份并返回登录页。
+- 游客/管理员的实际账号密码校验由后端 `/api/login` 决定，前端只负责发起登录与保存 token。
+
 ## 环境变量
 
 - VITE_API_BASE_URL：前端请求前缀，默认 /api
@@ -69,7 +80,7 @@ npm run dev
 npm run build
 npm run preview
 ```
-http://localhost:5173/?code=1111011 进来的有更高的权限获取全部模型，这个功能目前是纯前端完成
 
+当前版本已恢复登录页与前端认证接线，但是否能成功登录取决于部署中的 OpenClaw 后端是否已经包含对应 `/api/login` 与 token 鉴权实现。若本地后端代码较旧，请先同步后端分支后再联调。
 
 当前版本只实现前端项目创建与本地联调，没有接入 openclaw 仓库现有的 Docker Compose、Caddy 或 Nginx 路由。后续如果要生产同域发布，可以再把 dist 或前端容器接入现有反向代理。

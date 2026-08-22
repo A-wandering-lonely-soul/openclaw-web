@@ -1,5 +1,6 @@
 import { API_BASE_URL, DEFAULT_TIMEOUT_MS } from './constants'
 import type { InstallSkillPayload, ProviderModelState, SkillsResponse } from './types'
+import { AUTH_KEY, type AuthState } from '@/stores/auth'
 
 interface ApiErrorPayload {
   response?: string
@@ -23,10 +24,22 @@ async function requestJson<T>(path: string, init: RequestInit = {}, timeout = DE
   const timer = window.setTimeout(() => controller.abort(), timeout)
 
   try {
+    let authToken = ''
+    try {
+      const raw = window.localStorage.getItem(AUTH_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as AuthState
+        authToken = parsed.token || ''
+      }
+    } catch {
+      // ignore auth parse errors
+    }
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         ...(init.headers || {}),
       },
       signal: controller.signal,
@@ -59,6 +72,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}, timeout = DE
 export async function sendChatMessage(
   prompt: string,
   chatId: string,
+  sessionTitle = '',
   images?: { type: string; data: string; file_path: string }[],
 ) {
   return requestJson<{ response: string }>('/chat', {
@@ -67,6 +81,7 @@ export async function sendChatMessage(
       prompt,
       chat_id: chatId,
       entry: 'web_frontend',
+      title: sessionTitle,
       ...(images && images.length ? { images } : {}),
     }),
   })
@@ -75,7 +90,7 @@ export async function sendChatMessage(
 export async function clearChatContext(chatId: string) {
   return requestJson<{ status: string }>('/clear_context', {
     method: 'POST',
-    body: JSON.stringify({ chat_id: chatId }),
+    body: JSON.stringify({ chat_id: chatId, entry: 'web_frontend' }),
   })
 }
 
@@ -116,5 +131,12 @@ export async function installSkill(payload: InstallSkillPayload) {
   return requestJson<{ status: string; installed: { dir: string; skill_id: string; name: string } }>('/skills/install', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export async function loginUser(username: string, password: string) {
+  return requestJson<{ user_id: number; role: string; username: string; display_name: string; token: string }>('/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
   })
 }
