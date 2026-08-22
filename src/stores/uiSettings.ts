@@ -31,3 +31,4 @@ export const useUiSettingsStore = defineStore('uiSettings', () => {
 
   return { blurAmount }
 })
+

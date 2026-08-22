@@ -1,5 +1,5 @@
 import { API_BASE_URL, DEFAULT_TIMEOUT_MS } from './constants'
-import type { InstallSkillPayload, ProviderModelState, SkillsResponse } from './types'
+import type { InstallSkillPayload, ProviderModelState, ServerSession, SkillsResponse, StockQuote, GoldQuote, StockIntraday } from './types'
 import { AUTH_KEY, type AuthState } from '@/stores/auth'
 
 interface ApiErrorPayload {
@@ -140,3 +140,50 @@ export async function loginUser(username: string, password: string) {
     body: JSON.stringify({ username, password }),
   })
 }
+
+export async function fetchSessions() {
+  return requestJson<{ sessions: ServerSession[] }>('/sessions')
+}
+
+export async function fetchSessionMessages(chatId: string) {
+  return requestJson<{ messages: Array<{ id: string; role: string; content: string; createdAt: string }> }>(
+    `/sessions/${encodeURIComponent(chatId)}/messages`,
+    {},
+    30_000,
+  )
+}
+
+export async function fetchMarketQuote(symbol: string, kind: 'stock' | 'gold' = 'stock') {
+  return requestJson<StockQuote | GoldQuote>(
+    `/market/quote?symbol=${encodeURIComponent(symbol)}&kind=${kind}`,
+    {},
+    30_000,
+  )
+}
+
+export async function fetchStockIntraday(symbol: string) {
+  return requestJson<StockIntraday>(
+    `/market/intraday?symbol=${encodeURIComponent(symbol)}`,
+    {},
+    30_000,
+  )
+}
+
+export interface WatchItem {
+  symbol: string
+  kind: 'stock' | 'gold'
+  label?: string | null
+}
+
+export async function fetchWatchlist(): Promise<WatchItem[]> {
+  const res = await requestJson<{ items: WatchItem[] }>('/watchlist')
+  return res.items
+}
+
+export async function saveWatchlist(items: WatchItem[]): Promise<void> {
+  await requestJson<{ status: string }>('/watchlist', {
+    method: 'PUT',
+    body: JSON.stringify({ items }),
+  })
+}
+
